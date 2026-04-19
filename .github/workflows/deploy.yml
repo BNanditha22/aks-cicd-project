@@ -1,0 +1,47 @@
+name: CI/CD to AKS
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  ACR_NAME: myacr98765
+  IMAGE_NAME: myapp
+  RESOURCE_GROUP: myResourceGroup
+  AKS_CLUSTER: myAKSCluster
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Build Docker Image
+      run: |
+        docker build -t $ACR_NAME.azurecr.io/$IMAGE_NAME:${{ github.sha }} .
+
+    - name: Login to ACR
+      run: |
+        az acr login --name $ACR_NAME
+
+    - name: Push Image
+      run: |
+        docker push $ACR_NAME.azurecr.io/$IMAGE_NAME:${{ github.sha }}
+
+    - name: Set AKS Context
+      run: |
+        az aks get-credentials --resource-group $RESOURCE_GROUP --name $AKS_CLUSTER --overwrite-existing
+
+    - name: Deploy to AKS
+      run: |
+        kubectl set image deployment/myapp-deployment myapp=$ACR_NAME.azurecr.io/$IMAGE_NAME:${{ github.sha }}
+        kubectl rollout status deployment/myapp-deployment
